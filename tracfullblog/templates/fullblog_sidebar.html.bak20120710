@@ -1,0 +1,93 @@
+<div xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:py="http://genshi.edgewall.org/"
+      py:strip="True">
+
+  <div id="sidebar">
+
+ 			<div class="sidebar-section" py:if="(defined('user_recent_post'))">
+      <p >
+            Your Lastst post: 
+      </p>      
+<!--       &nbsp; &nbsp;<a href="${req.href.blog(user_recent_post[4])}">${user_recent_post[4]}</a> -->
+      &nbsp;<a href="${req.href.blog(user_recent_post['url'])}">${user_recent_post['title']}</a>
+     <p> </p>
+    </div>
+
+
+    <div class="sidebar-section">
+      <p py:if="not (defined('blog_about') and blog_about.version)">
+        This blog does not yet have an 'About' post.
+        <a py:if="'BLOG_CREATE' in perm('blog')"
+            href="${req.href.blog('create', name='about')}">
+          Create 'About' post.
+        </a> 
+      </p>
+      <p py:if="defined('blog_about') and blog_about.version">
+        About: <a href="${req.href.blog('about')}">${blog_about.title}</a>
+      </p>
+    </div>
+
+    <div class="sidebar-section">
+      <p>
+        <span class="metainfo">
+          <a href="${req.href.blog(format='rss')}">
+            <img src="${chrome.htdocs_location}feed.png" alt="RSS" /> rss
+          </a>
+        </span>
+        Archive: <a href="${req.href.blog('archive')}">All posts</a> (${blog_total})
+      </p>
+    </div>
+    
+    <div class="sidebar-section">
+      <py:if test="blog_months">
+        <p>Browse by time:</p>
+        <ul>
+          <li py:for="month, count in blog_months">
+            <a href="${req.href.blog(month[0], month[1])}"
+              >${blog_month_names[month[1]-1]} ${month[0]}</a> (${count})
+          </li>
+        </ul>
+      </py:if>
+      <p py:if="not blog_months">No posts.</p>
+    </div>
+    
+    <div class="sidebar-section"
+          py:if="not blog_personal_blog">
+      <py:if test="blog_authors">
+        <p>Browse by author:</p>
+        <ul>
+          <li py:for="author,count  in blog_authors">
+            <span class="metainfo">
+              <a href="${req.href.blog('author', author, format='rss')}">
+                rss</a>
+            </span> 
+            <a href="${req.href.blog('author', author)}">${author}</a> (${count})</li>
+        </ul>
+      </py:if>
+      <p py:if="not blog_authors">No authors.</p>
+    </div>
+
+    <div class="sidebar-section${not blog_infotext and ' last' or None}">
+      <py:if test="blog_categories">
+        <p>Browse by category:</p>
+        <ul py:if="blog_categories">
+          <li py:for="category, count in blog_categories">
+            <span class="metainfo">
+              <a href="${req.href.blog('category', category, format='rss')}">
+                rss</a>
+            </span> 
+            <a href="${req.href.blog('category', category)}">${category}</a>
+                  (${count})
+          </li>
+        </ul>
+      </py:if>
+      <p py:if="not blog_categories">No categories.</p>
+    </div>
+
+    <div py:if="blog_infotext" id="blog-infotext" class="sidebar-section last">
+        ${wiki_to_html(context, blog_infotext)}
+    </div>
+
+  </div>
+
+</div>

@@ -1,0 +1,165 @@
+<!DOCTYPE html
+    PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:py="http://genshi.edgewall.org/"
+      xmlns:xi="http://www.w3.org/2001/XInclude">
+  <xi:include href="layout.html" />
+  <xi:include href="macros.html" />
+  <head>
+    <title>Blog${defined('blog_post') and ': ' + blog_post.title \
+                or req.args.get('blog_path') and defined('blog_list_title') \
+                      and ': ' + blog_list_title}</title>
+    <meta py:if="defined('blog_post_list')" name="ROBOTS" content="NOINDEX" />
+    <link py:if="defined('blog_post') and blog_post.version"
+        rel="alternate" href="${href.blog(format='rss')}"
+        type="application/rss+xml" class="rss" title="RSS Feed" />
+    <script type="text/javascript">
+      jQuery(document).ready(function($) {
+        $("#content").find("h1,h2,h3,h4,h5,h6").filter("[id]").addAnchor("Link here");
+      });
+    </script>
+  </head>
+
+  <body>
+
+    <xi:include href="fullblog_macro_post.html" />
+
+    <div id="content" class="blog wiki">
+
+      <xi:include href="fullblog_sidebar.html" />
+
+      <div id="blog-main">
+
+        <!--! View single post with comments -->
+      
+        <py:if test="defined('blog_post') and blog_post.version">
+          ${render_blog_post(blog_post)}
+
+          <!--! Buttons for edit etc. -->
+          <py:if test="not list_mode and ('BLOG_MODIFY_ALL' in perm(blog_post.resource) or (
+                  blog_post.author==perm.username and 'BLOG_MODIFY_OWN' in perm(blog_post.resource)))">
+            <div class="buttons">
+              <form method="get" action="${href.blog('edit', blog_post.name)}">
+                <div>
+                  <input type="submit" value="${_('Edit post')}" accesskey="e" />
+                </div>
+              </form>
+              ${attach_file_form(blog_attachments)}
+              <form method="get" action="${href.blog('delete', blog_post.name)}"
+                    py:if="'BLOG_ADMIN' in perm(blog_post.resource)">
+                <div>
+                  <input type="submit" value="${_('Delete...')}"
+                      accesskey="d" />
+                </div>
+              </form>
+            </div>
+          </py:if>
+        
+          <!--! List attachments -->
+          ${list_of_attachments(blog_attachments, compact=True)}
+
+          <!--! View comments -->
+          <div id="comments" py:with="blog_comments = blog_post.get_comments()">
+            <h2 id="comment-header">Comments</h2>
+            <py:if test="blog_comments">
+              <div py:for="index, comment in enumerate(blog_comments)"
+                  class="blog-comment${index % 2 == 0 and ' odd' or ' even'}" id="comment-${comment.number}">
+                <span py:if="'BLOG_ADMIN' in perm(blog_post.resource)"
+                    class="metainfo blog-comment-delete">
+                  <a href="${href.blog('delete', blog_post.name, comment=comment.number)}">Delete comment</a>
+                </span>
+                <div class="comment-info">
+                    <a href="${req.href.blog(comment.post_name)}#comment-${to_unicode(comment.number)}">
+                      ${comment.number}.</a>
+                    ${format_author(comment.author)} --
+                    ${format_datetime(comment.time, '%Y-%m-%d %H:%M')}</div>
+                <div class="comment-body">${wiki_to_html(context, comment.comment)}</div>
+              </div>
+            </py:if>
+            <p py:if="not blog_comments">No comments.</p>
+          </div>
+
+          <!--! Add new comment -->
+          <div py:if="'BLOG_COMMENT' in perm(blog_post.resource)" id="newcomment">
+            <h3>Add New Comment</h3>
+            <form action="${req.href.blog(blog_post.name)}#preview" method="post">
+              <fieldset>
+                  <div py:if="defined('blog_comment')"
+                          id="preview" class="blog-comment">
+                    <fieldset>
+                      <legend>
+                        Comment preview
+                        <a py:if="req.chrome.warnings" href="#warning">(Warnings)</a>
+                      </legend>
+                      <div class="comment-info">
+                        ${format_author(blog_comment.author)} --
+                        ${format_datetime(blog_comment.time, '%Y-%m-%d %H:%M')}
+                      </div>
+                      <div class="comment_body">${wiki_to_html(context, blog_comment.comment)}</div>
+                    </fieldset>
+                  </div>
+                  <div class="field">
+                    <label for="comment">Comment (you may use
+                      <a tabindex="42" href="${href.wiki('WikiFormatting')}">WikiFormatting</a>
+                      here):
+                    </label><br />
+                    <textarea class="wikitext" id="comment" name="comment" 
+                      cols="80" rows="8">${defined('blog_comment') and blog_comment.comment or ''}</textarea>
+                  </div>
+                <py:if test="req.authname == 'anonymous'">
+                  <div class="field">
+                    <label for="author">Your email or username:</label>
+                      <br />
+                      <input id="author" type="text" 
+                          name="author" size="30"
+                          value="${defined('blog_comment') and blog_comment.author or req.authname}" />
+                  </div>
+                </py:if>
+                <div class="buttons">
+                  <input type="submit" name="previewcomment" value="Preview comment" />
+                  <input size="30" type='submit' name="submitcomment"
+                      value="Add comment" />
+                  <input type="hidden" name="action" value="comment" />
+                  <input type="submit" name="cancelcomment" value="Cancel" />
+                </div>
+                <script type="text/javascript" src="${chrome.htdocs_location}js/wikitoolbar.js" />
+              </fieldset>
+            </form>
+          </div>
+
+        </py:if>
+        <!--! Single blog post rendering end -->
+
+        <!--! Requesting a non-existing blog post -->
+        <p py:if="defined('blog_post') and not blog_post.version">
+          No blog post named '${blog_post.name}'.
+            <a href="${req.href.blog('create', name=blog_post.name)}"
+              class="button">
+              Create it!
+            </a>
+        </p>
+
+        <!--! View list of posts -->
+        <py:if test="defined('blog_post_list')">
+       
+        
+          
+          <p py:if="not len(blog_post_list)">
+            No blog posts available.
+          </p>
+          
+         <xi:include href="fullblog_paging.html" />
+        
+          <div py:for="blog_post in blog_post_list" py:strip="True"> 
+            ${render_blog_post(blog_post, list_mode=True)}
+          </div>
+        </py:if>
+						
+						<xi:include href="fullblog_paging.html" />
+      </div>
+
+    </div>
+
+  </body>
+</html>

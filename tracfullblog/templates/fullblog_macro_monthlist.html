@@ -1,0 +1,33 @@
+<div xmlns:py="http://genshi.edgewall.org/" py:strip="True">
+
+  <!--! Macro to render a plain listing with header (if available) -->
+  <div py:def="render_monthlist(heading, posts)" class="monthlist">
+      <h3 py:strip="not heading" id="${heading}">${heading}</h3>
+      <p py:if="not posts">No blog posts.</p>
+      <ul>
+        <li py:for="name, version, time, author, title, body, categories in posts">
+          <a href="${req.href.blog(name)}">${title}</a>
+          <span class="metainfo" py:if="not defined('show_meta') and True or show_meta">
+            &nbsp;-- Posted on ${format_datetime(time, '%Y-%m-%d %H:%M')}
+            <py:if test="not blog_personal_blog">
+              : author <a href="${req.href.blog('author', author)}">${author}</a>
+            </py:if>
+            <py:if test="categories">
+              : categories
+              <span py:for="cat in categories">
+                <a href="${req.href.blog('category', cat)}">${cat}</a>
+              </span>
+            </py:if>
+          </span>
+        </li>
+      </ul>
+  </div>
+
+  <!--! Directly execute the macro on import if 'execute_blog_macro' is set.
+        For this not to throw errors it presumes variables to be called
+        already exists in the data dictionary. -->
+  <py:if test="defined('execute_blog_macro') and execute_blog_macro">
+    <div class="blog">${render_monthlist(heading, posts)}</div>
+  </py:if>
+
+</div>

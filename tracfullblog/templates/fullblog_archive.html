@@ -1,0 +1,36 @@
+<!DOCTYPE html
+    PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:py="http://genshi.edgewall.org/"
+      xmlns:xi="http://www.w3.org/2001/XInclude">
+  <xi:include href="layout.html" />
+  <xi:include href="macros.html" />
+  <head>
+    <title>Blog Archive</title>
+    <meta name="ROBOTS" content="NOINDEX" />
+    <script type="text/javascript">
+      jQuery(document).ready(function($) {
+        $("#content").find("h1,h2,h3,h4,h5,h6").filter("[id]").addAnchor("Link here");
+      });
+    </script>
+  </head>
+
+  <body>
+
+    <div id="content" class="blog wiki">
+
+      <xi:include href="fullblog_sidebar.html" />
+      <xi:include href="fullblog_macro_monthlist.html" />
+
+      <div id="blog-main">
+        <h1>Blog Archive</h1>
+        <p py:if="not blog_archive">No blog posts.</p>
+        <div py:for="period, posts in blog_archive" py:strip="True">
+          ${render_monthlist(to_unicode("%s %d" % (blog_month_names[period.month-1], period.year)), posts)}
+        </div>
+      </div>
+
+    </div>
+  </body>
+</html>

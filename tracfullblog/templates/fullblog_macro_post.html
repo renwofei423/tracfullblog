@@ -1,0 +1,44 @@
+<div xmlns:py="http://genshi.edgewall.org/" py:strip="True">
+
+  <!--! Macro to render a post -->
+  <div py:def="render_blog_post(post, list_mode=False)">
+    <h1 class="blog-title" id="${post.name}"><a href="${req.href.blog(post.name)}"
+        py:strip="not list_mode">${post.title}</a>
+    </h1>
+    <div class="blog-body" xml:space="preserve"
+        py:with="do_shorten = defined('blog_max_size') and len(post.body) > blog_max_size">
+      ${wiki_to_html(context(post.resource), do_shorten and post.body[:blog_max_size] + ' ... ' \
+          or post.body)}
+        <p py:if="do_shorten"><a href="${href.blog(post.name)}">(Read more)</a></p>
+    </div>
+    <ul class="metainfo" py:if="not defined('show_meta') and True or show_meta">
+      <li class="metadates">Posted: ${format_datetime(post.publish_time, '%Y-%m-%d %H:%M')}
+        <span class="metaupdated" py:if="len(post.versions) > 1">
+          (Updated: ${format_datetime(post.version_time, '%Y-%m-%d %H:%M')})
+        </span>
+      </li>
+      <li class="metaauthor" py:if="not blog_personal_blog">Author:
+        <a href="${req.href.blog('author', post.author)}">${post.author}</a> </li>
+      <li class="metacategories">Categories:
+        <py:for each="cat in post.category_list">
+          <a href="${req.href.blog('category', cat)}">${cat}</a>
+        </py:for>
+        <py:if test="not post.category_list"> (none)</py:if>
+      </li>
+      <li py:if="list_mode">
+        <a href="${req.href.blog(post.name)}">Comments</a> (${len(post.get_comments())})
+      </li>
+       <li py:if="list_mode">
+        <a href="${req.href.blog(post.name)}">Attachments</a> (${post.get_attachment_num()})
+      </li>
+    </ul>
+  </div>
+
+  <!--! Directly execute the macro on import if 'execute_blog_macro' is set.
+        For this not to throw errors it presumes variables to be called
+        already exists in the data dictionary. -->
+  <py:if test="defined('execute_blog_macro') and execute_blog_macro">
+    ${render_blog_post(post, list_mode)}
+  </py:if>
+
+</div>

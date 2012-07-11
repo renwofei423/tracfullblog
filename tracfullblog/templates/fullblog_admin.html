@@ -1,0 +1,70 @@
+<!DOCTYPE html
+    PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:xi="http://www.w3.org/2001/XInclude"
+      xmlns:py="http://genshi.edgewall.org/">
+  <xi:include href="admin.html" />
+  <head>
+    <title>Blog Admin</title>
+  </head>
+
+  <body>
+
+    <h2>Blog Settings and Information</h2>
+    
+    <p class="help">Edit various settings for the Blog module.</p>
+
+    <div class="narrow">
+
+      <form class="mod" id="modsettings" method="post" action="">
+       <fieldset>
+        <legend>Blog Settings:</legend>
+        <div class="field">
+         <label for="numpostsfront">Number of posts on front page:<br />
+           <input type="text" size="10" name="numpostsfront"
+                              value="${blog_admin.numpostsfront}" />
+         </label>
+        </div>
+        <div class="field">
+         <label for="defaultpostname">Template for naming new blog posts:<br />
+                (username and time substitution available, like <tt>${'$USER'}-%Y/%m/%d/my_topic</tt>)<br />
+           <input type="text" size="35" name="defaultpostname"
+                              value="${blog_admin.defaultpostname}" />
+         </label>
+        </div>
+        <div class="buttons">
+         <input type="submit" name="savesettings" value="Save Settings" />
+        </div>
+       </fieldset>
+      </form>
+
+      <form id="bloginfo" class="mod" method="post" action="">
+       <fieldset>
+        <legend>Blog sidebar information:</legend>
+        <div class="field">
+          <fieldset class="iefix">
+            <label for="bloginfotext">Text to display in Blog sidebar (you may use <a tabindex="42"
+              href="${req.href.wiki('WikiFormatting')}">WikiFormatting</a> here):</label>
+            <br />
+            <p>
+              <textarea id="bloginfotext"
+                        name="bloginfotext" class="wikitext" rows="8"
+                        cols="60">${blog_admin.bloginfotext}</textarea>
+            </p>
+          </fieldset>
+        </div>
+        <div class="buttons">
+         <input type="submit" name="savebloginfotext" value="Save Text" />
+        </div>
+        <script type="text/javascript" src="${chrome.htdocs_location}js/wikitoolbar.js">
+          addWikiFormattingToolbar(document.getElementById('bloginfotext'))</script>
+       </fieldset>
+      </form>
+
+    </div>
+
+  </body>
+
+</html>
+

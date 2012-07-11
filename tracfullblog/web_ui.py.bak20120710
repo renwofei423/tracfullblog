@@ -1,0 +1,598 @@
+# -*- coding: utf-8 -*-
+"""
+Interface code for the plugin.
+Various providers for menus and request handling.
+
+License: BSD
+
+(c) 2007 ::: www.CodeResort.com - BV Network AS (simon-code@bvnetwork.no)
+"""
+
+# Imports from standard lib
+import datetime
+import re
+from pkg_resources import resource_filename
+
+# Trac and Genshi imports
+from genshi.builder import tag
+from trac.attachment import AttachmentModule
+from trac.config import ListOption, BoolOption, IntOption
+from trac.core import *
+from trac.mimeview.api import Context
+from trac.resource import Resource
+from trac.search.api import ISearchSource, shorten_result
+from trac.timeline.api import ITimelineEventProvider
+from trac.util import arity
+from trac.util.datefmt import utc
+from trac.util.text import shorten_line
+from trac.util.translation import _
+from trac.web.api import IRequestHandler, HTTPNotFound
+from trac.web.chrome import INavigationContributor, ITemplateProvider, \
+        add_stylesheet, add_link, add_warning, add_notice, add_ctxtnav, prevnext_nav
+from trac.wiki.formatter import format_to
+
+try:
+    from trac.util.compat import itemgetter
+    from trac.util.compat import sorted, set
+except ImportError:
+    # 0.12 compat - sorted and set should already be part of Python 2.4
+    from operator import itemgetter
+
+# Imports from same package
+from model import *
+from core import FullBlogCore
+from util import map_month_names, parse_period
+
+__all__ = ['FullBlogModule']
+
+
+class FullBlogModule(Component):
+    
+    implements(IRequestHandler, INavigationContributor,
+               ISearchSource, ITimelineEventProvider,
+               ITemplateProvider)
+
+    # Options
+    
+    month_names = ListOption('fullblog', 'month_names',
+        doc = """Ability to specify a list of month names for display in groupings.
+        If empty it will make a list from default locale setting.
+        Enter list of 12 months like:
+        `month_names = January, February, ..., December` """)
+
+    personal_blog = BoolOption('fullblog', 'personal_blog', False,
+        """When using the Blog as a personal blog (only one author), setting to 'True'
+        will disable the display of 'Browse by author:' in sidebar, and also removes
+        various author links and references. """)
+
+    num_items = IntOption('fullblog', 'num_items_front', 20,
+        """Option to specify how many recent posts to display on the
+        front page of the Blog (and RSS feeds).""")
+
+    # INavigationContributor methods
+    
+    def get_active_navigation_item(self, req):
+        """This method is only called for the `IRequestHandler` processing the
+        request.
+        
+        It should return the name of the navigation item that should be
+        highlighted as active/current.
+        """
+        return 'blog'
+
+    def get_navigation_items(self, req):
+        """Should return an iterable object over the list of navigation items to
+        add, each being a tuple in the form (category, name, text).
+        """
+        if 'BLOG_VIEW' in req.perm('blog'):
+            yield ('mainnav', 'blog',
+                   tag.a(_('Blog'), href=req.href.blog()) )
+
+    # IRequstHandler methods
+    
+    def match_request(self, req):
+        """Return whether the handler wants to process the given request."""
+        match = re.match(r'^/blog(?:/(.*)|$)', req.path_info)
+        if match:
+            req.args['blog_path'] = ''
+            if match.group(1):
+                req.args['blog_path'] = match.group(1)
+            return True
+
+    def process_request(self, req):
+        """ Processing the request. """
+
+        req.perm('blog').assert_permission('BLOG_VIEW')
+
+        blog_core = FullBlogCore(self.env)
+        format = req.args.get('format', '').lower()
+
+        command, pagename, path_items, listing_data = self._parse_path(req)
+        action = req.args.get('action', 'view').lower()
+        try:
+            version = int(req.args.get('version', 0))
+        except:
+            version = 0
+
+        data = {}
+        template = 'fullblog_view.html'
+        data['blog_about'] = BlogPost(self.env, 'about')
+        data['blog_infotext'] = blog_core.get_bloginfotext()
+        blog_month_names = map_month_names(
+                    self.env.config.getlist('fullblog', 'month_names'))
+        data['blog_month_names'] = blog_month_names
+
+        user_recent_post = get_blog_posts(self.env,author=req.authname, per_num='1' ,current_num='0') 
+        if user_recent_post:   
+            data['user_recent_post']={}
+            data['user_recent_post']['url']= user_recent_post[0][0]
+            data['user_recent_post']['title']= user_recent_post[0][4]
+
+        self.env.log.debug(
+            "Blog debug: command=%r, pagename=%r, path_items=%r" % (
+                command, pagename, path_items))
+        
+        
+        if not command:
+            # Request for just root (display latest)
+            try:
+                page=req.args.get('page') 
+                print page                                
+            except:
+                pass
+            try:
+                page=int(page)               
+            except:
+                page=1 
+                
+            if page>1:               
+                data['page'] =  int(page)                
+            else:
+                page = 1
+                data['page'] =  1
+                
+            
+            if data['page'] > 1 :
+                data['page_pre4'] = data['page'] - 1
+                data['page_pre'] = data['page'] -1
+            if data['page'] > 2 :
+                data['page_pre3'] = data['page'] - 2                
+            if data['page'] > 3 :
+                data['page_pre2'] = data['page'] - 3                
+            if data['page'] > 4 :
+                data['page_pre1'] = data['page'] - 4
+
+            data['page_next1'] = data['page'] + 1
+            data['page_next2'] = data['page'] + 2
+            data['page_next3'] = data['page'] + 3
+            data['page_next4'] = data['page'] + 4
+            data['page_next'] = data['page_next1']
+
+                
+            data['blog_post_list'] = []
+            count = 0
+            maxcount = self.num_items
+            if page:  
+                blog_posts = get_blog_posts(self.env,per_num=maxcount, current_num=(page-1))
+            else:
+                blog_posts = get_blog_posts(self.env,per_num=maxcount)
+            if not blog_posts:
+                del data['page_next1'],data['page_next2'],data['page_next3'],data['page_next4'],data['page_next']
+#                data['page_next1'] = data['page_next2'] =  data['page_next3'] = data['page_next4'] = data['page_next'] = ''
+                
+            for post in blog_posts:
+                bp = BlogPost(self.env, post[0], post[1])
+                if 'BLOG_VIEW' in req.perm(bp.resource):
+                    data['blog_post_list'].append(bp)
+                    count += 1
+                if maxcount and count == maxcount:
+                    # Only display a certain number on front page (from config)
+                    break
+            data['blog_list_title'] = "Recent posts" + \
+                    (len(blog_posts) > maxcount and \
+                        " (max %d) - Browse or Archive for more" % (maxcount,) \
+                    or '')
+            add_link(req, 'alternate', req.href.blog(format='rss'), 'RSS Feed',
+                     'application/rss+xml', 'rss')
+
+        
+
+
+        elif command == 'archive':
+            # Requesting the archive page
+            template = 'fullblog_archive.html'
+            data['blog_archive'] = []
+            for period, period_posts in group_posts_by_month(get_all_blog_posts(self.env)):
+                allowed_posts = []
+                for post in period_posts:
+                    bp = BlogPost(self.env, post[0], post[1])
+                    if 'BLOG_VIEW' in req.perm(bp.resource):
+                        allowed_posts.append(post)
+                if allowed_posts:
+                    data['blog_archive'].append((period, allowed_posts))
+            add_link(req, 'alternate', req.href.blog(format='rss'), 'RSS Feed',
+                     'application/rss+xml', 'rss')
+
+        elif command == 'view' and pagename:
+            # Requesting a specific blog post
+            the_post = BlogPost(self.env, pagename, version)
+            req.perm(the_post.resource).require('BLOG_VIEW')
+            if not the_post.version:
+                raise HTTPNotFound("No blog post named '%s'." % pagename)
+            if req.method == 'POST':   # Adding/Previewing a comment
+                # Permission?
+                req.perm(the_post.resource).require('BLOG_COMMENT')
+                comment = BlogComment(self.env, pagename)
+                comment.comment = req.args.get('comment', '')
+                comment.author = (req.authname != 'anonymous' and req.authname) \
+                            or req.args.get('author')
+                comment.time = datetime.datetime.now(utc)
+                warnings = []
+                if 'cancelcomment' in req.args:
+                    req.redirect(req.href.blog(pagename))
+                elif 'previewcomment' in req.args:
+                    warnings.extend(blog_core.create_comment(req, comment, verify_only=True))
+                elif 'submitcomment' in req.args and not warnings:
+                    warnings.extend(blog_core.create_comment(req, comment))
+                    if not warnings:
+                        req.redirect(req.href.blog(pagename
+                                )+'#comment-'+str(comment.number))
+                data['blog_comment'] = comment
+                # Push all warnings out to the user.
+                for field, reason in warnings:
+                    if field:
+                        add_warning(req, "Field '%s': %s" % (field, reason))
+                    else:
+                        add_warning(req, reason)
+            data['blog_post'] = the_post
+            context = Context.from_request(req, the_post.resource)
+            data['context'] = context
+            data['blog_attachments'] = AttachmentModule(self.env).attachment_data(context)
+            # Previous and Next ctxtnav
+            prev, next = blog_core.get_prev_next_posts(req.perm, the_post.name)
+            if prev:
+                add_link(req, 'prev', req.href.blog(prev), prev)
+            if next:
+                add_link(req, 'next', req.href.blog(next), next)
+            if arity(prevnext_nav) == 4:
+                # 0.12 compat following trac:changeset:8597
+                prevnext_nav(req, 'Previous Post', 'Next Post')
+            else:
+                prevnext_nav(req, 'Post')
+
+        elif command in ['create', 'edit']:
+            template = 'fullblog_edit.html'
+            default_pagename = blog_core._get_default_postname(req.authname)
+            the_post = BlogPost(self.env, pagename or default_pagename)
+            warnings = []
+
+            if command == 'create' and req.method == 'GET' and not the_post.version:
+                # Support appending query arguments for populating intial fields
+                the_post.update_fields(req.args)
+            if command == 'create' and the_post.version:
+                # Post with name or suggested name already exists
+                if 'BLOG_CREATE' in req.perm and the_post.name == default_pagename \
+                                    and not req.method == 'POST':
+                    if default_pagename:
+                        add_notice(req, "Suggestion for new name already exists "
+                            "('%s'). Please make a new name." % the_post.name)
+                elif pagename:
+                    warnings.append(
+                        ('', "A post named '%s' already exists. Enter new name."
+                                            % the_post.name))
+                the_post = BlogPost(self.env, '')
+            if command == 'edit':
+                req.perm(the_post.resource).require('BLOG_VIEW') # Starting point
+            if req.method == 'POST':
+                # Create or edit a blog post
+                if 'blog-cancel' in req.args:
+                    if req.args.get('action','') == 'edit':
+                        req.redirect(req.href.blog(pagename))
+                    else:
+                        req.redirect(req.href.blog())
+                # Assert permissions
+                if command == 'create':
+                    req.perm(Resource('blog', None)).require('BLOG_CREATE')
+                elif command == 'edit':
+                    if the_post.author == req.authname:
+                        req.perm(the_post.resource).require('BLOG_MODIFY_OWN')
+                    else:
+                        req.perm(the_post.resource).require('BLOG_MODIFY_ALL')
+
+                # Check input
+                orig_author = the_post.author
+                if not the_post.update_fields(req.args):
+                    warnings.append(('', "None of the fields have changed."))
+                version_comment = req.args.get('new_version_comment', '')
+                if 'blog-preview' in req.args:
+                    warnings.extend(blog_core.create_post(
+                            req, the_post, req.authname, version_comment, verify_only=True))
+                elif 'blog-save' in req.args and not warnings:
+                    warnings.extend(blog_core.create_post(
+                            req, the_post, req.authname, version_comment))
+                    if not warnings:
+                        req.redirect(req.href.blog(the_post.name))
+                context = Context.from_request(req, the_post.resource)
+                data['context'] = context
+                data['blog_attachments'] = AttachmentModule(self.env).attachment_data(context)
+                data['blog_action'] = 'preview'
+                data['blog_version_comment'] = version_comment
+                if (orig_author and orig_author != the_post.author) and (
+                        not 'BLOG_MODIFY_ALL' in req.perm(the_post.resource)):
+                    add_notice(req, "If you change the author you cannot " \
+                        "edit the post again due to restricted permissions.")
+                    data['blog_orig_author'] = orig_author
+            for field, reason in warnings:
+                if field:
+                    add_warning(req, "Field '%s': %s" % (field, reason))
+                else:
+                    add_warning(req, reason)
+            data['blog_edit'] = the_post
+
+        elif command == 'delete':
+            bp = BlogPost(self.env, pagename)
+            req.perm(bp.resource).require('BLOG_ADMIN')
+            if 'blog-cancel' in req.args:
+                req.redirect(req.href.blog(pagename))
+            comment = int(req.args.get('comment', '0'))
+            warnings = []
+            if comment:
+                # Deleting a specific comment
+                bc = BlogComment(self.env, pagename, comment)
+                if not bc.number:
+                    raise TracError(
+                            "Cannot delete. Blog post name and/or comment number missing.")
+                if req.method == 'POST' and comment and pagename:
+                    warnings.extend(blog_core.delete_comment(bc))
+                    if not warnings:
+                        add_notice(req, "Blog comment %d deleted." % comment)
+                        req.redirect(req.href.blog(pagename))
+                template = 'fullblog_delete.html'
+                data['blog_comment'] = bc
+            else:
+                # Delete a version of a blog post or all versions
+                # with comments and attachments if only version.
+                if not bp.version:
+                    raise TracError(
+                            "Cannot delete. Blog post '%s' does not exist." % (
+                                    bp.name))
+                version = int(req.args.get('version', '0'))
+                if req.method == 'POST':
+                    if 'blog-version-delete' in req.args:
+                        if bp.version != version:
+                            raise TracError(
+                                "Cannot delete. Can only delete most recent version.")
+                        warnings.extend(blog_core.delete_post(bp, version=bp.versions[-1]))
+                    elif 'blog-delete' in req.args:
+                        version = 0
+                        warnings.extend(blog_core.delete_post(bp, version=version))
+                    if not warnings:
+                        if version > 1:
+                            add_notice(req, "Blog post '%s' version %d deleted." % (
+                                                pagename, version))
+                            req.redirect(req.href.blog(pagename))
+                        else:
+                            add_notice(req, "Blog post '%s' deleted." % pagename)
+                            req.redirect(req.href.blog())
+                template = 'fullblog_delete.html'
+                data['blog_post'] = bp
+            for field, reason in warnings:
+                if field:
+                    add_warning(req, "Field '%s': %s" % (field, reason))
+                else:
+                    add_warning(req, reason)                        
+
+        elif command.startswith('listing-'):
+            # 2007/10 or category/something or author/theuser
+            title = category = author = ''
+            from_dt = to_dt = None
+            if command == 'listing-month':
+                from_dt = listing_data['from_dt']
+                to_dt = listing_data['to_dt']
+                title = "Posts for the month of %s %d" % (
+                        blog_month_names[from_dt.month -1], from_dt.year)
+                add_link(req, 'alternate', req.href.blog(format='rss'), 'RSS Feed',
+                        'application/rss+xml', 'rss')
+
+            elif command == 'listing-category':
+                category = listing_data['category']
+                if category:
+                    title = "Posts in category %s" % category
+                    add_link(req, 'alternate', req.href.blog('category', category,
+                        format='rss'), 'RSS Feed', 'application/rss+xml', 'rss')
+            elif command == 'listing-author':
+                author = listing_data['author']
+                if author:
+                    title = "Posts by author %s" % author
+                    add_link(req, 'alternate', req.href.blog('author', author,
+                        format='rss'), 'RSS Feed', 'application/rss+xml', 'rss')
+            if not (author or category or (from_dt and to_dt)):
+                raise HTTPNotFound("Not a valid path for viewing blog posts.")
+            blog_posts = []
+            for post in get_blog_posts(self.env, category=category,
+                        author=author, from_dt=from_dt, to_dt=to_dt):
+                bp = BlogPost(self.env, post[0], post[1])
+                if 'BLOG_VIEW' in req.perm(bp.resource):
+                    blog_posts.append(bp)
+            data['blog_post_list'] = blog_posts
+            data['blog_list_title'] = title
+        else:
+            raise HTTPNotFound("Not a valid blog path.")
+
+        if (not command or command.startswith('listing-')) and format == 'rss':
+            data['context'] = Context.from_request(req, absurls=True)
+            data['blog_num_items'] = self.num_items
+            return 'fullblog.rss', data, 'application/rss+xml'
+
+        data['blog_months'], data['blog_authors'], data['blog_categories'], \
+                data['blog_total'] = \
+                    blog_core.get_months_authors_categories(
+                        user=req.authname, perm=req.perm)
+        if 'BLOG_CREATE' in req.perm('blog'):
+            add_ctxtnav(req, 'New Post', href=req.href.blog('create'),
+                    title="Create new Blog Post")
+        add_stylesheet(req, 'tracfullblog/css/fullblog.css')
+        add_stylesheet(req, 'common/css/code.css')
+        data['blog_personal_blog'] = self.env.config.getbool('fullblog',
+                                                'personal_blog')
+        b=data['blog_categories']
+        data['blog_categories']=sorted(b, key =lambda b:b[1],reverse=True)
+        return (template, data, None)
+    
+    # ISearchSource methods
+    
+    def get_search_filters(self, req):
+        """Return a list of filters that this search source supports.
+        
+        Each filter must be a `(name, label[, default])` tuple, where `name` is
+        the internal name, `label` is a human-readable name for display and
+        `default` is an optional boolean for determining whether this filter
+        is searchable by default.
+        """
+        if 'BLOG_VIEW' in req.perm('blog', id=None):
+            yield ('blog', 'Blog')
+
+    def get_search_results(self, req, terms, filters):
+        """Return a list of search results matching each search term in `terms`.
+        
+        The `filters` parameters is a list of the enabled filters, each item
+        being the name of the tuples returned by `get_search_events`.
+
+        The events returned by this function must be tuples of the form
+        `(href, title, date, author, excerpt).`
+        """
+        blog_realm = Resource('blog')
+        if not 'BLOG_VIEW' in req.perm(blog_realm):
+            return
+        if 'blog' in filters:
+            # Blog posts
+            results = search_blog_posts(self.env, terms)
+            for name, version, publish_time, author, title, body in results:
+                bp_resource = blog_realm(id=name, version=version)
+                if 'BLOG_VIEW' in req.perm(bp_resource):
+                    yield (req.href.blog(name), 'Blog: '+title,
+                        publish_time, author, shorten_result(
+                                text=body, keywords=terms))
+            # Blog comments
+            results = search_blog_comments(self.env, terms)
+            for post_name, comment_number, comment, comment_author, \
+                    comment_time in results:
+                bp_resource = blog_realm(id=post_name, version=None)
+                if 'BLOG_VIEW' in req.perm(bp_resource):
+                    bp = BlogPost(self.env, post_name)
+                    yield (req.href.blog(
+                            post_name)+'#comment-'+str(comment_number),
+                        'Blog: '+bp.title+' (Comment '+str(comment_number)+')',
+                        comment_time, comment_author,
+                        shorten_result(text=comment, keywords=terms))
+    
+    # ITimelineEventProvider methods
+
+    def get_timeline_filters(self, req):
+        if 'BLOG_VIEW' in req.perm('blog', id=None):
+            yield ('blog', _('Blog details'))
+
+    def get_timeline_events(self, req, start, stop, filters):
+        if 'blog' in filters:
+            blog_realm = Resource('blog')
+            if not 'BLOG_VIEW' in req.perm(blog_realm):
+                return
+            add_stylesheet(req, 'tracfullblog/css/fullblog.css')
+            # Blog posts
+            blog_posts = get_blog_posts(self.env, from_dt=start, to_dt=stop,
+                                        all_versions=True)
+            for name, version, time, author, title, body, category_list \
+                    in blog_posts:
+                bp_resource = blog_realm(id=name, version=version)
+                if 'BLOG_VIEW' not in req.perm(bp_resource):
+                    continue
+                bp = BlogPost(self.env, name, version=version)
+                yield ('blog', bp.version_time, bp.version_author,
+                            (bp_resource, bp, None))
+            # Attachments (will be rendered by attachment module)
+            for event in AttachmentModule(self.env).get_timeline_events(
+                req, blog_realm, start, stop):
+                yield event
+            # Blog comments
+            blog_comments = get_blog_comments(self.env, from_dt=start, to_dt=stop)
+            blog_comments = sorted(blog_comments, key=itemgetter(4), reverse=True)
+            for post_name, number, comment, author, time in blog_comments:
+                bp_resource = blog_realm(id=post_name)
+                if 'BLOG_VIEW' not in req.perm(bp_resource):
+                    continue
+                bp = BlogPost(self.env, post_name)
+                bc = BlogComment(self.env, post_name, number=number)
+                yield ('blog', time, author, (bp_resource, bp, bc))
+
+    def render_timeline_event(self, context, field, event):
+        bp_resource, bp, bc = event[3]
+        compat_format_0_11_2 = 'oneliner'
+        if hasattr(context, '_hints'):
+             compat_format_0_11_2 = None
+        if bc: # A blog comment
+            if field == 'url':
+                return context.href.blog(bp.name) + '#comment-%d' % bc.number
+            elif field == 'title':
+                return tag('Blog: ', tag.em(bp.title), ' comment added')
+            elif field == 'description':
+                comment = compat_format_0_11_2 and shorten_line(bc.comment) \
+                            or bc.comment
+                return format_to(self.env, compat_format_0_11_2,
+                            context(resource=bp_resource), comment)
+        else: # A blog post
+            if field == 'url':
+                return context.href.blog(bp.name)
+            elif field == 'title':
+                return tag('Blog: ', tag.em(bp.title),
+                        bp.version > 1 and ' edited' or ' created')
+            elif field == 'description':
+                comment = compat_format_0_11_2 and shorten_line(bp.version_comment) \
+                            or bp.version_comment
+                return format_to(self.env, compat_format_0_11_2,
+                        context(resource=bp_resource), comment)
+
+    # ITemplateProvider methods
+
+    def get_htdocs_dirs(self):
+        """ Makes the 'htdocs' folder inside the egg available. """
+        return [('tracfullblog', resource_filename('tracfullblog', 'htdocs'))]
+
+    def get_templates_dirs(self):
+        """ Location of Trac templates provided by plugin. """
+        return [resource_filename('tracfullblog', 'templates')]
+
+    # Internal methods
+
+    def _parse_path(self, req):
+        """ Parses the request path for the blog and returns a
+        ('command', 'pagename', 'path_items', 'listing_data') tuple. """
+        # Parse out the path and actions from args
+        path = req.args.get('blog_path', '')
+        path_items = path.split('/')
+        path_items = [item for item in path_items if item] # clean out empties
+        command = pagename = ''
+        listing_data = {}
+        from_dt, to_dt = parse_period(path_items)
+        if not path_items:
+            pass # emtpy default for return is fine
+        elif len(path_items) > 1 and path_items[0].lower() in ['view', 'edit', 'delete']:
+            command = path_items[0].lower()
+            pagename = '/'.join(path_items[1:])
+        elif len(path_items) == 1 and path_items[0].lower() == 'archive':
+            command = path_items[0].lower()
+        elif len(path_items) >= 1 and path_items[0].lower() == 'create':
+            command = path_items[0].lower()
+            pagename = req.args.get('name','') or (len(path_items) > 1 \
+                                                    and '/'.join(path_items[1:]))
+        elif len(path_items) > 1 and path_items[0].lower() in ['author', 'category']:
+            command = 'listing' + '-' + path_items[0].lower()
+            listing_data[path_items[0].lower()] = '/'.join(path_items[1:])
+        elif len(path_items) == 2 and (from_dt, to_dt) != (None, None):
+            command = 'listing-month'
+            listing_data['from_dt'] = from_dt
+            listing_data['to_dt'] = to_dt
+        else:
+            # A request for a regular page
+            command = 'view'
+            pagename = path
+        return (command, pagename, path_items, listing_data)

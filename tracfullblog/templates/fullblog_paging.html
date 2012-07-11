@@ -1,0 +1,57 @@
+<div xmlns:py="http://genshi.edgewall.org/" py:strip="True">
+<div class="paging" py:if="(defined('page'))">
+           	<span class="previous" py:if="(defined('page_pre'))">
+           		<a href="${req.href.blog()}?page=${page_pre}"> ← </a>
+           		&nbsp;
+           	</span>           	
+          <span py:if="(defined('page_pre1')) and (defined('page'))">
+           		<a href="${req.href.blog()}?page=${page_pre1}"> ${page_pre1} </a>
+           		 &nbsp;
+           	</span>          
+        		<span  py:if="(defined('page_pre2'))">
+           		<a href="${req.href.blog()}?page=${page_pre2}"> ${page_pre2} </a>
+           			&nbsp;
+           	</span>
+           
+        		<span  py:if="(defined('page_pre3'))">
+           		<a href="${req.href.blog()}?page=${page_pre3}">${page_pre3} </a>
+           		&nbsp; 
+           	</span>
+        		       		        		
+        		<span py:if="(defined('page_pre4'))">
+           		<a href="${req.href.blog()}?page=${page_pre4}"> ${page_pre4} </a>
+           		&nbsp;
+           	</span>
+           	
+        	<span class="current">
+        		${page}
+        	</span>
+        	&nbsp;
+        		<span py:if="(defined('page_next1'))">
+           		<a href="${req.href.blog()}?page=${page_next1}"> ${page_next1} </a>
+           		&nbsp;
+           	</span>
+           
+        		<span  py:if="(defined('page_next2'))">
+           		<a href="${req.href.blog()}?page=${page_next2}"> ${page_next2} </a>
+           		 	&nbsp;
+           	</span>
+          
+        		<span  py:if="(defined('page_next3'))">
+           		<a href="${req.href.blog()}?page=${page_next3}">${page_next3} </a>
+           			&nbsp;  
+           	</span>
+        	      		        		
+        		<span py:if="(defined('page_next4'))">
+           		<a href="${req.href.blog()}?page=${page_next4}"> ${page_next4} </a>
+           		 	&nbsp;
+           	</span>
+          
+        		<span class="previous" py:if="(defined('page_next'))">
+           		<a href="${req.href.blog()}?page=${page_next}"> → </a>
+           		&nbsp;
+           	</span>
+        		
+        
+        </div>     
+</div>   

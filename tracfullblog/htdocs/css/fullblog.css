@@ -1,0 +1,156 @@
+/*
+** Styles for the /blog pages and blog items in macros
+*/ 
+
+.blog #blog-main {
+    width: 75%;
+    margin: 1em 0em;
+    padding-right: 1em;
+}
+.blog #sidebar {
+    width: 20%;
+    float: right;
+    padding: 1em;
+    margin: 1em 0em;
+    background-color: #F3F3F3;
+}
+
+.blog-title *:link {
+    color: black;
+}
+
+.blog .metainfo {
+    color: gray;
+    font-size: smaller;
+    text-align: right;
+}
+
+.blog ul.metainfo {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+
+.blog-comment {
+    padding: 0.25em 0.25em;
+}
+
+.comment-info {
+    color:gray;
+    font-size:smaller;
+    padding-bottom: 0.5em;
+    padding-top: 0.5em;
+}
+
+#content div.odd {
+    background-color:#F3F3F3;
+}
+.even {}
+
+#preview {
+    background: #f4f4f4 url(../../../chrome/common/draft.png);
+    margin: 1em 0 2em;
+    overflow: auto;
+}
+
+#preview legend {
+    color: black;
+}
+
+.blog-list-title {
+    text-align: center;
+    color: gray;
+    padding-bottom: 0.5em;
+}
+    
+#content div.field {
+    padding-bottom: 1em;
+}
+
+div.sidebar-section {
+    border-bottom: 1px solid #CCC;
+}
+
+div.sidebar-section.last {
+    border-bottom: none;
+}
+
+div.sidebar-section ul {
+    margin-left: 0;
+    padding-left: 0.5em;
+    list-style: none;
+}
+
+div.sidebar-section .metainfo, .blog-comment-delete {
+    float: right;
+}
+
+#sidebar *:link, #sidebar *:visited {
+    border-bottom: none;
+}
+
+div.monthlist li {
+    padding-top: 0.3em;
+}
+
+/*
+** Style used for displaying Blog icon in Timeline
+*/ 
+
+.timeline dt.blog a {
+    background-image: url(../blog.png);
+}
+
+/*
+** Style used for a blog macros
+*/ 
+
+div.blogflash {
+    background: #F3F3F3 none repeat scroll 0%;
+    border: 2px solid gray;
+    float: right;
+    font-size: 0.8em;
+    margin: 0 0 1.25em 1.25em;
+    padding: 0.5em 1em;
+    width: 400px;
+}
+
+div.blogflash h2, div.blogflash h3 {
+    margin-left: 0;
+    font-size: 1.2em;
+} 
+
+div.blogflash h3 {
+    margin-left: 0;
+    font-size: 1.1em;
+}
+
+div.blogflash .blog-title {
+    font-size: 1.35em;
+    margin-left: 0;
+}
+
+div.blogflash span.metaupdated {
+    display: none;
+}
+
+div.blogflash li.metadates {
+    float: left;
+}
+
+/*
+** Adjustments for printing
+*/ 
+
+@media print {
+    .blog #blog-main {
+        width: 100%;
+    }
+    .blog #newcomment, .blog .blog-comment-delete {
+        display: none;
+    }
+    .blog #sidebar {
+        width: 0%;
+        display: none;
+    }
+}
