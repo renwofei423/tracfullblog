@@ -3,7 +3,7 @@ tracfullblog
 
 tracfullblog's fork and make better.
 ------------------------------------------------
-此插件是http://trac-hacks.org/wiki/FullBlogPlugin的一个分支，根据自己需要进行了改进。
+此插件是 http://trac-hacks.org/wiki/FullBlogPlugin  的一个分支，根据自己需要进行了改进。
 
 改进主要有：
 
