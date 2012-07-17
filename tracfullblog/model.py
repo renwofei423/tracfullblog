@@ -9,7 +9,7 @@ License: BSD
 (c) 2007 ::: www.CodeResort.com - BV Network AS (simon-code@bvnetwork.no)
 """
 
-import datetime
+import datetime,time
 from trac.attachment import Attachment
 from trac.resource import Resource
 from trac.search import search_to_sql
@@ -17,6 +17,7 @@ from trac.util.datefmt import to_datetime, to_timestamp, utc
 
 
 import cache
+import os
 
 try:
     from trac.util.compat import itemgetter
@@ -163,61 +164,86 @@ def get_all_blog_posts(env, category='', author='', from_dt=None, to_dt=None,
     Returns a list of tuples of the form:
         (name, version, time, author, title, body, category_list)
     Use 'name' and 'version' to instantiate BlogPost objects."""
-    cache_blog_posts= env.project_name + '_blog_posts'
-    if cache.c(cache_blog_posts):
-        return cache.c(cache_blog_posts)
-    else:        
-        env.log.debug("%r not found. Cacheing..." % cache_blog_posts)       
     
-        cnx = env.get_db_cnx()   
-        cursor = cnx.cursor()
+#    env.log.debug("............................................. %r..................  .........." % os.getpid())
+#    cache_blog_posts= env.project_name + '_all_blog_posts'
+#    # cache_blog_posts= env.project_name + '_blog_posts' + "_" + category + "_" + author + "_" + str(from_dt)+ "_" + str(to_dt)
+#    if  category:
+#        cache_blog_posts +=  "_category_" + category
+#    if  author:
+#        cache_blog_posts += "_author_" + author
+#    if  from_dt:       
+#        s_from_dt = str(from_dt)
+#        cache_blog_posts += s_from_dt.replace(" ", "").replace(":", "").replace("-", "").replace("+", "")
+##        print "from_dt: ",
+##        print from_dt
+#    if  to_dt:    
+#        s_to_dt= str(to_dt)
+#        cache_blog_posts += s_to_dt.replace(" ", "").replace(":", "").replace("-", "").replace("+", "")
+#        
+##    print "cache_blog_posts is ",
+##    print cache.c(cache_blog_posts)
+##    print "+++++++++++++++++++++++++++++++++++"
+#    if cache.c(cache_blog_posts):
+#        env.log.debug("%r  found Cache ,return Cache.......182..." % cache_blog_posts)       
+#        return cache.c(cache_blog_posts)
+#    else:        
+#        env.log.debug("%r not found. Cacheing.................185.............................." % cache_blog_posts)       
+#    print  "get_all_blog_posts's category:",
+#    print category,
+#    print " author:",
+#    print author, 
+#    print " from_dt:",
+#    print from_dt, 
+#    print " to_dt:",
+#    print to_dt
+    cnx = env.get_db_cnx()   
+    cursor = cnx.cursor()
+
+    # Build the list of WHERE restrictions
+    time_field = 'bp1.publish_time'
+    join_operation = ",(SELECT name, max(version) AS ver " \
+                     "FROM fullblog_posts GROUP BY name) bp2 " \
+                     "WHERE bp1.version = bp2.ver AND bp1.name = bp2.name "
+    where_clause = ""
+    where_values = None
+    if all_versions:
+        time_field = 'bp1.version_time'
+        join_operation = ""
+    args = [category and ("bp1.categories "+cnx.like(), "%"+category+"%"),
+            author and ("bp1.author=%s", author) or None,
+            from_dt and (time_field+">%s", to_timestamp(from_dt)) or None,
+            to_dt and (time_field+"<%s", to_timestamp(to_dt)) or None]
+    args = [arg for arg in args if arg]  # Ignore the None values
+    if args:
+        where_start = "AND "
+        if not join_operation:
+            where_start = "WHERE "
+        where_clause = where_start + " AND ".join([arg[0] for arg in args])
+        where_values = tuple([arg[1] for arg in args])
+
+    # Run the SQL
+    sql = "SELECT bp1.name, bp1.version, bp1.publish_time, bp1.author, " \
+               "bp1.title, bp1.body,bp1.categories " \
+               "FROM fullblog_posts bp1 " \
+               + join_operation + where_clause \
+               + " ORDER BY bp1.publish_time DESC"
+    env.log.debug("get_all_blog_posts() SQL: %r (%r)" % (sql, where_values))
+    cursor.execute(sql, where_values)
+
+    # Return the rows
     
-        # Build the list of WHERE restrictions
-        time_field = 'bp1.publish_time'
-        join_operation = ",(SELECT name, max(version) AS ver " \
-                         "FROM fullblog_posts GROUP BY name) bp2 " \
-                         "WHERE bp1.version = bp2.ver AND bp1.name = bp2.name "
-        where_clause = ""
-        where_values = None
-        if all_versions:
-            time_field = 'bp1.version_time'
-            join_operation = ""
-        args = [category and ("bp1.categories "+cnx.like(), "%"+category+"%"),
-                author and ("bp1.author=%s", author) or None,
-                from_dt and (time_field+">%s", to_timestamp(from_dt)) or None,
-                to_dt and (time_field+"<%s", to_timestamp(to_dt)) or None]
-        args = [arg for arg in args if arg]  # Ignore the None values
-        if args:
-            where_start = "AND "
-            if not join_operation:
-                where_start = "WHERE "
-            where_clause = where_start + " AND ".join([arg[0] for arg in args])
-            where_values = tuple([arg[1] for arg in args])
-    
-        # Run the SQL
-        sql = "SELECT bp1.name, bp1.version, bp1.publish_time, bp1.author, " \
-                   "bp1.title, bp1.body,bp1.categories " \
-                   "FROM fullblog_posts bp1 " \
-                   + join_operation + where_clause \
-                   + " ORDER BY bp1.publish_time DESC limit 10"            
-                  
-                   #just for quick test + " ORDER BY bp1.publish_time DESC limit 10"
-                   
-        env.log.debug("get_all_blog_posts() SQL: %r (%r)" % (sql, where_values))
-        cursor.execute(sql, where_values)
-    
-        # Return the rows
-        
-        blog_posts = []
-        for row in cursor:
-            # Extra check needed to weed out almost-matches where requested
-            # category is a substring of another (searched using LIKE)
-            categories = _parse_categories(row[6])
-            if category and category not in categories:
-                continue
-            blog_posts.append((row[0], row[1], to_datetime(row[2], utc), row[3],
-                    row[4], row[5], categories))
-        return cache.c(cache_blog_posts,blog_posts)
+    blog_posts = []
+    for row in cursor:
+        # Extra check needed to weed out almost-matches where requested
+        # category is a substring of another (searched using LIKE)
+        categories = _parse_categories(row[6])
+        if category and category not in categories:
+            continue
+        blog_posts.append((row[0], row[1], to_datetime(row[2], utc), row[3],
+                row[4], row[5], categories))
+#        print "cache_blog_posts set new value!"
+    return blog_posts
 
 def get_blog_comments(env, post_name='', from_dt=None, to_dt=None):
     """ Returns comments as a list of tuples from search based on
@@ -559,7 +585,7 @@ class BlogPost(object):
             attachment.append(row)
         return len(attachment)
 
-
+    
     # Internal methods
     
     def _fetch_fields(self, version=0):

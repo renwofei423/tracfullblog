@@ -304,11 +304,22 @@ class FullBlogCore(Component):
         posts with a publish_time within the intervals (None means ignore).
         * If user and perm is provided, the list is also filtered for permissions.
         * Note also that it only fetches from most recent version. """
-        cache_months_authors_categories= self.env.project_name + "_months_authors_categories"
+#        cache_months_authors_categories= self.env.project_name + "_months_authors_categories"
+        cache_months_authors_categories = self.env.project_name + '_blog_posts_months'
+#        if  user:
+#            cache_months_authors_categories += "_user_" + user
+        if  from_dt:   
+            s_from_dt = str(from_dt)
+            cache_months_authors_categories += s_from_dt.replace(" ", "").replace(":", "").replace("-", "").replace("+", "")
+        if  to_dt:        
+             s_to_dt= str(to_dt)
+             cache_months_authors_categories += s_to_dt.replace(" ", "").replace(":", "").replace("-", "").replace("+", "")       
+            
         if cache.c(cache_months_authors_categories):
+            self.env.log.debug("%r  found Cache ,return Cache...318......." % cache_months_authors_categories)       
             return cache.c(cache_months_authors_categories)
         else:
-            self.env.log.debug("%r not found. Cacheing..." % cache_months_authors_categories)
+            self.env.log.debug("%r not found. Cacheing.. 322." % cache_months_authors_categories)
             
             blog_posts = get_all_blog_posts(self.env, from_dt=from_dt, to_dt=to_dt)
             a_dict = {}
